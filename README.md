@@ -3,6 +3,7 @@
 Budget-aware, diversity-maximizing chunk packing for LLM context windows.
 
 [![npm version](https://img.shields.io/npm/v/context-packer.svg)](https://www.npmjs.com/package/context-packer)
+[![npm downloads](https://img.shields.io/npm/dt/context-packer.svg)](https://www.npmjs.com/package/context-packer)
 [![license](https://img.shields.io/npm/l/context-packer.svg)](https://github.com/SiluPanda/context-packer/blob/master/LICENSE)
 [![node](https://img.shields.io/node/v/context-packer.svg)](https://nodejs.org/)
 
