@@ -142,6 +142,9 @@ class PackError extends Error {
 |------|-----------|
 | `INVALID_BUDGET` | `budget` is zero or negative. |
 | `MISSING_CUSTOM_STRATEGY` | `strategy` is `'custom'` but no `customStrategy` function was provided. |
+| `INVALID_STRATEGY` | An unknown `strategy` value was provided. |
+| `DIMENSION_MISMATCH` | Embedding vectors have different dimensions in cosine similarity. |
+| `MISSING_EMBEDDINGS` | `similarityMetric` is `'cosine'` but one or both chunks lack embeddings. |
 
 ---
 
@@ -214,7 +217,7 @@ Full configuration interface for `pack()` and `createPacker()`.
 ```typescript
 interface PackOptions {
   budget: number
-  strategy?: 'greedy' | 'mmr' | 'knapsack' | 'coverage' | 'custom'
+  strategy?: 'greedy' | 'mmr' | 'knapsack' | 'custom'
   lambda?: number
   ordering?: 'natural' | 'u-shaped' | 'chronological'
   redundancyThreshold?: number
@@ -427,6 +430,9 @@ try {
 |------|------------|
 | `INVALID_BUDGET` | `budget` is zero or negative. |
 | `MISSING_CUSTOM_STRATEGY` | `strategy` is `'custom'` and `customStrategy` is not provided. |
+| `INVALID_STRATEGY` | An unknown `strategy` value was provided. |
+| `DIMENSION_MISMATCH` | Embedding vectors have different dimensions in cosine similarity. |
+| `MISSING_EMBEDDINGS` | `similarityMetric` is `'cosine'` but one or both chunks lack embeddings. |
 
 When no chunks fit the budget, `pack` returns an empty `chunks` array with a valid `PackReport` rather than throwing. Check `report.selectedCount === 0` to detect this case.
 

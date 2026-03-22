@@ -2,22 +2,27 @@ import type { ScoredChunk, StrategyContext } from '../types.js'
 import { greedyStrategy } from './greedy.js'
 
 const KNAPSACK_TOKEN_LIMIT = 5000
+const KNAPSACK_CELL_LIMIT = 500_000
 
 export function knapsackStrategy(
   chunks: ScoredChunk[],
   ctx: StrategyContext
 ): ScoredChunk[] {
-  if (ctx.budget > KNAPSACK_TOKEN_LIMIT) {
+  const capacity = Math.ceil(ctx.budget)
+
+  if (capacity > KNAPSACK_TOKEN_LIMIT) {
     return greedyStrategy(chunks, ctx)
   }
 
   const items = chunks.map(c => ({
     chunk: c,
-    tokens: (c.tokens ?? ctx.countTokens(c.content)) + ctx.chunkOverheadTokens,
+    tokens: Math.ceil((c.tokens ?? ctx.countTokens(c.content)) + ctx.chunkOverheadTokens),
     score: c.score,
   }))
 
-  const capacity = ctx.budget
+  if (items.length * capacity > KNAPSACK_CELL_LIMIT) {
+    return greedyStrategy(chunks, ctx)
+  }
   const n = items.length
 
   // dp[i][w] = max score using first i items with weight budget w

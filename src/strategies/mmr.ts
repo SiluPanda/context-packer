@@ -26,14 +26,15 @@ export function mmrStrategy(
       const relevance = chunk.score
       let maxSim = 0
 
-      if (selected.length > 0) {
-        for (const sel of selected) {
-          const sim = chunkSimilarity(chunk, sel, metric)
-          if (sim > maxSim) maxSim = sim
-        }
+      for (const sel of selected) {
+        const sim = chunkSimilarity(chunk, sel, metric)
+        if (sim > maxSim) maxSim = sim
       }
 
-      const mmrScore = lambda * relevance - (1 - lambda) * maxSim
+      // First pick (no selected chunks yet): select by pure relevance
+      const mmrScore = selected.length === 0
+        ? relevance
+        : lambda * relevance - (1 - lambda) * maxSim
 
       if (mmrScore > bestScore) {
         bestScore = mmrScore
