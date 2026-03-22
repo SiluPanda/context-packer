@@ -29,7 +29,7 @@ export interface ExcludedChunk {
 
 export interface PackOptions {
   budget: number
-  strategy?: 'greedy' | 'mmr' | 'knapsack' | 'coverage' | 'custom'
+  strategy?: 'greedy' | 'mmr' | 'knapsack' | 'custom'
   lambda?: number
   ordering?: 'natural' | 'u-shaped' | 'chronological'
   redundancyThreshold?: number

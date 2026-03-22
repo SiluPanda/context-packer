@@ -1,4 +1,5 @@
 import type { ScoredChunk } from './types.js'
+import { PackError } from './errors.js'
 
 export function jaccardSimilarity(a: string, b: string): number {
   const trigramsA = getTrigrams(a)
@@ -20,6 +21,12 @@ function getTrigrams(text: string): string[] {
 }
 
 export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length) {
+    throw new PackError(
+      `Embedding dimension mismatch: ${a.length} vs ${b.length}`,
+      'DIMENSION_MISMATCH'
+    )
+  }
   let dot = 0, na = 0, nb = 0
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i]
@@ -37,6 +44,12 @@ export function chunkSimilarity(
 ): number {
   if (metric === 'cosine' || (metric === 'auto' && a.embedding && b.embedding)) {
     if (a.embedding && b.embedding) return cosineSimilarity(a.embedding, b.embedding)
+    if (metric === 'cosine') {
+      throw new PackError(
+        'Cosine similarity requires embeddings on both chunks',
+        'MISSING_EMBEDDINGS'
+      )
+    }
   }
   return jaccardSimilarity(a.content, b.content)
 }

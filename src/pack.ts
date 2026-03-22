@@ -55,7 +55,7 @@ export async function pack(chunks: ScoredChunk[], options: PackOptions): Promise
 
   // 2. Redundancy deduplication
   const threshold = options.redundancyThreshold
-  if (threshold != null && threshold < 1.0) {
+  if (threshold != null && threshold > 0 && threshold < 1.0) {
     const { kept, excluded } = deduplicateChunks(
       candidates,
       threshold,
@@ -91,20 +91,32 @@ export async function pack(chunks: ScoredChunk[], options: PackOptions): Promise
       }
       selected = options.customStrategy(candidates, ctx)
       break
-    default:
+    case 'greedy':
       selected = greedyStrategy(candidates, ctx)
+      break
+    default:
+      throw new PackError(
+        `Unknown strategy: '${strategy}'`,
+        'INVALID_STRATEGY'
+      )
   }
 
-  // 4. Mark budget-excluded remaining candidates
+  // 4. Mark excluded remaining candidates with correct reason
   const selectedIds = new Set(selected.map(c => c.id))
+  const usedTokens = selected.reduce(
+    (s, c) => s + (c.tokens ?? counter(c.content)) + overhead,
+    0
+  )
+  const remainingBudget = options.budget - usedTokens
   for (const c of candidates) {
     if (!selectedIds.has(c.id)) {
+      const chunkCost = c.tokens + overhead
       allExcluded.push({
         id: c.id,
         content: c.content,
         score: c.score,
         tokens: c.tokens,
-        reason: 'budget',
+        reason: chunkCost <= remainingBudget ? 'strategy' : 'budget',
         metadata: c.metadata,
       })
     }

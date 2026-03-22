@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { pack, createPacker } from '../pack.js'
 import { PackError } from '../errors.js'
-import type { ScoredChunk } from '../types.js'
+import { cosineSimilarity } from '../similarity.js'
+import type { ScoredChunk, PackOptions } from '../types.js'
 
 // Token counter: each char = 1 token for predictable test math
 const count = (t: string) => t.length
@@ -238,5 +239,133 @@ describe('maxCandidates', () => {
     const ids = result.chunks.map(c => c.id)
     expect(ids).not.toContain('c')
     expect(result.report.excluded.some(e => e.id === 'c' && e.reason === 'max-candidates')).toBe(true)
+  })
+})
+
+describe('strategy exclusion reason', () => {
+  it('marks chunks that could fit as strategy-excluded, not budget-excluded', async () => {
+    // Budget 100, select only top 1 chunk (knapsack/greedy), remaining chunks small enough to fit
+    const chunks = makeChunks([
+      { content: 'aaaa', score: 0.9, id: 'a' }, // 4 tokens
+      { content: 'bb',   score: 0.1, id: 'b' }, // 2 tokens — fits in remaining budget
+    ])
+    // Knapsack with budget 5: picks 'a' (4 tokens), remaining = 1 token
+    // 'b' needs 2 tokens > 1 remaining → budget exclusion
+    const r1 = await pack(chunks, { budget: 5, strategy: 'knapsack', tokenCounter: count })
+    expect(r1.report.excluded[0].reason).toBe('budget')
+
+    // Budget 100: picks 'a' + 'b' both fit
+    const r2 = await pack(chunks, { budget: 100, strategy: 'greedy', tokenCounter: count })
+    expect(r2.chunks).toHaveLength(2)
+  })
+})
+
+describe('invalid strategy', () => {
+  it('throws PackError with INVALID_STRATEGY for unknown strategy', async () => {
+    const chunks = makeChunks([{ content: 'aa', score: 0.9, id: 'a' }])
+    await expect(
+      pack(chunks, { budget: 100, strategy: 'bogus' as PackOptions['strategy'], tokenCounter: count })
+    ).rejects.toThrow(PackError)
+
+    try {
+      await pack(chunks, { budget: 100, strategy: 'bogus' as PackOptions['strategy'], tokenCounter: count })
+    } catch (err) {
+      expect((err as PackError).code).toBe('INVALID_STRATEGY')
+    }
+  })
+})
+
+describe('empty chunks input', () => {
+  it('returns empty result for empty chunks array', async () => {
+    const result = await pack([], { budget: 100, tokenCounter: count })
+    expect(result.chunks).toHaveLength(0)
+    expect(result.report.tokensUsed).toBe(0)
+    expect(result.report.selectedCount).toBe(0)
+  })
+})
+
+describe('cosine similarity validation', () => {
+  it('throws DIMENSION_MISMATCH for mismatched embedding lengths', () => {
+    expect(() => cosineSimilarity([1, 2, 3], [1, 2])).toThrow(PackError)
+    try {
+      cosineSimilarity([1, 2, 3], [1, 2])
+    } catch (err) {
+      expect((err as PackError).code).toBe('DIMENSION_MISMATCH')
+    }
+  })
+})
+
+describe('cosine metric without embeddings', () => {
+  it('throws MISSING_EMBEDDINGS when metric is cosine but chunks lack embeddings', async () => {
+    const chunks: ScoredChunk[] = [
+      { content: 'hello world foo bar baz', score: 0.9, id: 'a', tokens: 5 },
+      { content: 'hello world foo bar baz', score: 0.8, id: 'b', tokens: 5 },
+    ]
+    await expect(
+      pack(chunks, { budget: 100, redundancyThreshold: 0.5, similarityMetric: 'cosine', tokenCounter: count })
+    ).rejects.toThrow(PackError)
+  })
+})
+
+describe('redundancyThreshold edge cases', () => {
+  it('threshold of 0 does not deduplicate (skipped)', async () => {
+    const chunks: ScoredChunk[] = [
+      { content: 'the quick brown fox jumps over the lazy dog', score: 0.9, id: 'a', tokens: 10 },
+      { content: 'the quick brown fox jumps over the lazy cat', score: 0.7, id: 'b', tokens: 10 },
+    ]
+    const result = await pack(chunks, { budget: 100, redundancyThreshold: 0, tokenCounter: count })
+    expect(result.chunks).toHaveLength(2)
+  })
+})
+
+describe('MMR first pick', () => {
+  it('selects highest-scored chunk first regardless of lambda', async () => {
+    // Deliberately put the highest-scored chunk last in the array
+    const chunks: ScoredChunk[] = [
+      { content: 'machine learning transformer', score: 0.6, id: 'c', tokens: 28 },
+      { content: 'the quick brown fox leaps', score: 0.85, id: 'b', tokens: 25 },
+      { content: 'the quick brown fox jumps', score: 0.9, id: 'a', tokens: 25 },
+    ]
+    const result = await pack(chunks, {
+      budget: 80,
+      strategy: 'mmr',
+      lambda: 0,
+      tokenCounter: count,
+    })
+    // First pick should be 'a' (highest score), even though it's last in array
+    expect(result.chunks[0].id).toBe('a')
+  })
+})
+
+describe('custom strategy', () => {
+  it('uses provided custom strategy function', async () => {
+    const chunks = makeChunks([
+      { content: 'aaaa', score: 0.9, id: 'a' },
+      { content: 'bb',   score: 0.8, id: 'b' },
+      { content: 'ccc',  score: 0.3, id: 'c' },
+    ])
+    const result = await pack(chunks, {
+      budget: 100,
+      strategy: 'custom',
+      customStrategy: (candidates) => candidates.filter(c => c.score > 0.5),
+      tokenCounter: count,
+    })
+    const ids = result.chunks.map(c => c.id)
+    expect(ids).toContain('a')
+    expect(ids).toContain('b')
+    expect(ids).not.toContain('c')
+  })
+})
+
+describe('chronological ordering', () => {
+  it('orders chunks by metadata.timestamp ascending', async () => {
+    const chunks: ScoredChunk[] = [
+      { content: 'aa', score: 0.9, id: 'a', tokens: 2, metadata: { timestamp: 300 } },
+      { content: 'bb', score: 0.8, id: 'b', tokens: 2, metadata: { timestamp: 100 } },
+      { content: 'cc', score: 0.7, id: 'c', tokens: 2, metadata: { timestamp: 200 } },
+    ]
+    const result = await pack(chunks, { budget: 100, ordering: 'chronological', tokenCounter: count })
+    const ids = result.chunks.map(c => c.id)
+    expect(ids).toEqual(['b', 'c', 'a'])
   })
 })
