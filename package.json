@@ -1,5 +1,5 @@
 {
-  "name": "context-packer",
+  "name": "@silupanda/context-packer",
   "version": "0.2.0",
   "description": "Optimally pack retrieved chunks into an LLM context window",
   "main": "dist/index.js",
